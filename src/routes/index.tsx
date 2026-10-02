@@ -1,24 +1,101 @@
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  Activity, CalendarDays, CheckCircle2, ChevronDown, CircleDot, Clock3,
+  Download, ExternalLink, FileSpreadsheet, Filter, Flame, Globe2, Mail,
+  Menu, MessageCircle, MoreHorizontal, Phone, Plus, Search, Settings,
+  Sparkles, Target, Upload, UserRound, Users, X, Zap
+} from "lucide-react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
-export const Route = createFileRoute("/")({
-  component: Index,
-});
+export const Route = createFileRoute("/")({ component: Index });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+type Lead = {
+  id: number; name: string; company: string; title: string; email: string;
+  phone: string; website: string; linkedin: string; instagram: string;
+  location: string; status: string; lastTouch: string; nextTouch: string;
+  notes: string; source: string;
+};
+
+const seedLeads: Lead[] = [
+  { id: 1, name: "Sarah Mitchell", company: "Luma Dental Studio", title: "Owner", email: "sarah@lumadental.com", phone: "+1 415 555 0142", website: "https://lumadental.com", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "San Francisco, CA", status: "Hot", lastTouch: "Today, 10:42 AM", nextTouch: "Today, 4:00 PM", notes: "Interested in Google Ads. Asked for case studies.", source: "Apollo CSV" },
+  { id: 2, name: "James Carter", company: "Northstar Roofing", title: "Founder", email: "james@northstarroofing.com", phone: "+1 312 555 0188", website: "https://northstarroofing.com", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "Chicago, IL", status: "Contacted", lastTouch: "Yesterday", nextTouch: "Oct 4, 11:00 AM", notes: "Sent intro email. Follow up after weekend.", source: "Google Sheet" },
+  { id: 3, name: "Olivia Chen", company: "Bloom Skin Co.", title: "Marketing Director", email: "olivia@bloomskin.co", phone: "+1 646 555 0124", website: "https://bloomskin.co", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "New York, NY", status: "New", lastTouch: "Never", nextTouch: "Today, 2:30 PM", notes: "Strong Instagram presence. Pitch social + PPC.", source: "Manual" },
+  { id: 4, name: "Daniel Brooks", company: "Peak Performance Gym", title: "Co-Founder", email: "daniel@peakperformance.com", phone: "+1 512 555 0169", website: "https://peakperformance.com", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "Austin, TX", status: "Meeting", lastTouch: "Sep 30", nextTouch: "Oct 3, 3:00 PM", notes: "Discovery call booked. Needs lead generation plan.", source: "LinkedIn" },
+  { id: 5, name: "Mia Thompson", company: "Harbor Legal", title: "Partner", email: "mia@harborlegal.com", phone: "+1 206 555 0117", website: "https://harborlegal.com", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "Seattle, WA", status: "Nurture", lastTouch: "Sep 28", nextTouch: "Oct 10", notes: "Budget opens next month. Keep warm.", source: "Apollo CSV" },
+  { id: 6, name: "Ethan Wilson", company: "Evergreen Kitchens", title: "Owner", email: "ethan@evergreenkitchens.com", phone: "+1 305 555 0191", website: "https://evergreenkitchens.com", linkedin: "https://linkedin.com", instagram: "https://instagram.com", location: "Miami, FL", status: "New", lastTouch: "Never", nextTouch: "Oct 3, 10:00 AM", notes: "Website has clear conversion opportunities.", source: "Google Sheet" },
+];
+
+const statuses = ["All", "New", "Contacted", "Hot", "Meeting", "Nurture", "Won", "Lost"];
+const statusClass: Record<string, string> = {
+  New: "bg-slate-100 text-slate-600", Contacted: "bg-blue-50 text-blue-700", Hot: "bg-orange-50 text-orange-700",
+  Meeting: "bg-violet-50 text-violet-700", Nurture: "bg-amber-50 text-amber-700", Won: "bg-emerald-50 text-emerald-700", Lost: "bg-red-50 text-red-700",
+};
+
+function parseCSV(text: string): Lead[] {
+  const rows = text.trim().split(/\r?\n/).map((line) => line.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/).map((v) => v.replace(/^\"|\"$/g, "").trim()));
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const get = (row: string[], ...keys: string[]) => { const i = keys.map(k => headers.indexOf(k)).find(i => i >= 0); return i === undefined ? "" : row[i] || ""; };
+  return rows.slice(1).filter(r => r.some(Boolean)).map((r, i) => ({
+    id: Date.now() + i, name: get(r, "name", "fullname", "contactname") || `${get(r, "firstname")} ${get(r, "lastname")}`.trim(),
+    company: get(r, "company", "companyname", "organization"), title: get(r, "title", "jobtitle", "role"), email: get(r, "email", "emailaddress"),
+    phone: get(r, "phone", "phonenumber", "mobile"), website: get(r, "website", "domain", "companywebsite"), linkedin: get(r, "linkedin", "linkedinurl"),
+    instagram: get(r, "instagram", "instagramurl"), location: get(r, "location", "city", "address"), status: "New", lastTouch: "Never", nextTouch: "Not scheduled", notes: "", source: "CSV Upload"
+  }));
 }
+
+function Index() {
+  const [leads, setLeads] = useState(seedLeads);
+  const [status, setStatus] = useState("All");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Lead | null>(null);
+  const [tab, setTab] = useState("Pipeline");
+  const [importOpen, setImportOpen] = useState(false);
+  const [sidebar, setSidebar] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() => leads.filter(l => (status === "All" || l.status === status) && `${l.name} ${l.company} ${l.email} ${l.title}`.toLowerCase().includes(query.toLowerCase())), [leads, status, query]);
+  const stats = { total: leads.length, new: leads.filter(l => l.status === "New").length, hot: leads.filter(l => l.status === "Hot").length, meetings: leads.filter(l => l.status === "Meeting").length };
+
+  const importFile = (file: File) => {
+    const reader = new FileReader(); reader.onload = () => { const parsed = parseCSV(String(reader.result)); if (parsed.length) setLeads(prev => [...parsed, ...prev]); setImportOpen(false); }; reader.readAsText(file);
+  };
+
+  const exportCSV = () => {
+    const headers = ["Name","Company","Title","Email","Phone","Website","LinkedIn","Instagram","Location","Status","Notes"];
+    const body = leads.map(l => [l.name,l.company,l.title,l.email,l.phone,l.website,l.linkedin,l.instagram,l.location,l.status,l.notes].map(v => `"${v.replaceAll('"','""')}"`).join(","));
+    const blob = new Blob([[headers.join(","), ...body].join("\n")], { type: "text/csv" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "zaad-leads.csv"; a.click();
+  };
+
+  return <div className="min-h-screen bg-[#f7f8fa] text-[#18212f] font-sans">
+    <header className="h-[70px] bg-white border-b border-slate-200 flex items-center px-5 sticky top-0 z-30">
+      <button className="lg:hidden mr-3 p-2 rounded-lg hover:bg-slate-100" onClick={() => setSidebar(!sidebar)}><Menu size={20}/></button>
+      <div className="flex items-center gap-3 w-[220px]"><div className="w-10 h-10 rounded-xl bg-[#111827] text-white grid place-items-center font-black tracking-tight">Z</div><div><div className="font-extrabold text-lg leading-none">ZAAD</div><div className="text-[10px] text-slate-400 font-semibold tracking-widest">ZERO APPLES A DAY</div></div></div>
+      <div className="flex-1 max-w-xl mx-auto hidden md:block relative"><Search className="absolute left-3 top-2.5 text-slate-400" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search leads, companies, emails..." className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-100 border-0 outline-none focus:ring-2 focus:ring-slate-300 text-sm"/></div>
+      <div className="ml-auto flex items-center gap-2"><button onClick={() => setImportOpen(true)} className="hidden sm:flex items-center gap-2 px-4 h-10 rounded-xl bg-[#111827] text-white text-sm font-semibold hover:bg-slate-700"><Upload size={16}/> Import leads</button><button className="p-2 rounded-lg hover:bg-slate-100"><Settings size={19}/></button><div className="w-9 h-9 rounded-full bg-slate-200 grid place-items-center font-bold text-sm">AT</div></div>
+    </header>
+
+    <div className="flex">
+      {sidebar && <aside className="w-[225px] shrink-0 min-h-[calc(100vh-70px)] bg-white border-r border-slate-200 p-4 hidden lg:block"><div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold px-3 mb-3">Workspace</div><nav className="space-y-1">
+        {[['Pipeline',Activity],['Leads',Users],['Calls',Phone],['Emails',Mail],['DMs',MessageCircle],['Calendar',CalendarDays]].map(([label,Icon])=><button key={label as string} onClick={()=>setTab(label as string)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold ${tab===label?'bg-slate-100 text-slate-900':'text-slate-500 hover:bg-slate-50'}`}><Icon size={17}/>{label as string}{label==='Leads'&&<span className="ml-auto text-xs bg-slate-200 px-1.5 rounded-md">{leads.length}</span>}</button>)}
+      </nav><div className="border-t border-slate-100 my-5"/><div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold px-3 mb-3">Management</div><nav className="space-y-1"><button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:bg-slate-50"><Target size={17}/>Campaigns</button><button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:bg-slate-50"><Zap size={17}/>Automations</button></nav><div className="mt-auto pt-20"><div className="rounded-2xl bg-[#111827] text-white p-4"><Sparkles size={18} className="mb-3"/><div className="font-bold text-sm">Stay on top of follow-ups</div><p className="text-xs text-slate-300 mt-1 leading-5">ZAAD keeps every call, email and DM in one place.</p></div></div></aside>}
+
+      <main className="flex-1 min-w-0 p-5 lg:p-7">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6"><div><div className="text-sm text-slate-500 mb-1">Good evening, Azan</div><h1 className="text-2xl font-extrabold tracking-tight">Cold Outreach Command Center</h1><p className="text-sm text-slate-500 mt-1">One workspace for calls, emails, DMs, follow-ups and meetings.</p></div><div className="flex gap-2"><button onClick={exportCSV} className="h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm font-semibold flex items-center gap-2"><Download size={16}/> Export</button><button onClick={()=>setImportOpen(true)} className="h-10 px-4 rounded-xl bg-[#111827] text-white text-sm font-semibold flex items-center gap-2"><Plus size={16}/> Add leads</button></div></div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">{[["Total leads",stats.total,Users,"text-slate-700"],["New to contact",stats.new,CircleDot,"text-blue-600"],["Hot prospects",stats.hot,Flame,"text-orange-500"],["Meetings booked",stats.meetings,CalendarDays,"text-violet-600"]].map(([label,value,Icon,color])=><div key={label as string} className="bg-white border border-slate-200 rounded-2xl p-4"><div className="flex justify-between"><span className="text-xs font-semibold text-slate-500">{label as string}</span><Icon size={17} className={color as string}/></div><div className="text-2xl font-extrabold mt-3">{value as number}</div><div className="text-[11px] text-slate-400 mt-1">Live pipeline</div></div>)}</div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden"><div className="px-4 pt-4 border-b border-slate-200"><div className="flex items-center justify-between mb-4"><div className="flex gap-1 bg-slate-100 p-1 rounded-xl">{statuses.map(s=><button key={s} onClick={()=>setStatus(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${status===s?'bg-white shadow-sm text-slate-900':'text-slate-500'}`}>{s}</button>)}</div><button className="flex items-center gap-2 text-xs font-semibold text-slate-500 px-3 py-2 rounded-lg hover:bg-slate-50"><Filter size={15}/> Filters <ChevronDown size={14}/></button></div></div>
+          <div className="overflow-x-auto"><table className="w-full text-left min-w-[1050px]"><thead><tr className="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100"><th className="px-5 py-3 font-bold">Lead</th><th className="px-3 py-3 font-bold">Contact</th><th className="px-3 py-3 font-bold">Social</th><th className="px-3 py-3 font-bold">Status</th><th className="px-3 py-3 font-bold">Last touch</th><th className="px-3 py-3 font-bold">Next action</th><th className="px-3 py-3"></th></tr></thead><tbody>{filtered.map(lead=><tr key={lead.id} className="border-b border-slate-100 hover:bg-slate-50/70 transition"><td className="px-5 py-4"><button onClick={()=>setSelected(lead)} className="text-left flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-slate-100 grid place-items-center text-xs font-extrabold">{lead.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><div className="font-bold text-sm hover:underline">{lead.name}</div><div className="text-xs text-slate-500">{lead.title} · {lead.company}</div></div></button></td><td className="px-3 py-4"><div className="flex items-center gap-2"><a title="Call" href={`tel:${lead.phone}`} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center hover:bg-emerald-100"><Phone size={15}/></a><a title="Email" href={`mailto:${lead.email}`} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 grid place-items-center hover:bg-blue-100"><Mail size={15}/></a></div></td><td className="px-3 py-4"><div className="flex gap-1.5"><a title="LinkedIn" target="_blank" href={lead.linkedin || '#'} className="w-8 h-8 rounded-lg border border-slate-200 grid place-items-center text-[11px] font-black hover:bg-slate-100">in</a><a title="Instagram" target="_blank" href={lead.instagram || '#'} className="w-8 h-8 rounded-lg border border-slate-200 grid place-items-center text-[11px] font-black hover:bg-slate-100">ig</a><a title="Website" target="_blank" href={lead.website || '#'} className="w-8 h-8 rounded-lg border border-slate-200 grid place-items-center hover:bg-slate-100"><Globe2 size={14}/></a></div></td><td className="px-3 py-4"><span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${statusClass[lead.status] || 'bg-slate-100 text-slate-600'}`}>{lead.status}</span></td><td className="px-3 py-4 text-xs text-slate-500">{lead.lastTouch}</td><td className="px-3 py-4"><div className="flex items-center gap-2 text-xs font-semibold"><Clock3 size={14} className="text-slate-400"/>{lead.nextTouch}</div></td><td className="px-3 py-4"><button onClick={()=>setSelected(lead)} className="p-2 rounded-lg hover:bg-slate-100"><MoreHorizontal size={17}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="py-16 text-center text-sm text-slate-400">No leads match your filters.</div>}</div>
+        </div>
+
+        <div className="grid xl:grid-cols-3 gap-4 mt-5"><div className="xl:col-span-2 bg-white border border-slate-200 rounded-2xl p-5"><div className="flex justify-between items-center"><div><h2 className="font-extrabold">Today's outreach</h2><p className="text-xs text-slate-500 mt-1">Your next actions, sorted by urgency</p></div><span className="text-xs font-bold px-2.5 py-1 rounded-full bg-orange-50 text-orange-700">{stats.new + stats.hot} actions</span></div><div className="mt-5 grid md:grid-cols-3 gap-3">{[['Calls','Call hot leads','Phone',stats.hot],['Emails','Send follow-ups','Mail',Math.max(2,stats.new)],['Meetings','Upcoming demos','Calendar',stats.meetings]].map(([a,b,c,n])=><div key={a as string} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between"><div className="w-9 h-9 rounded-lg bg-slate-100 grid place-items-center">{c==='Phone'?<Phone size={16}/>:c==='Mail'?<Mail size={16}/>:<CalendarDays size={16}/>}</div><span className="font-extrabold">{n as number}</span></div><div className="font-bold text-sm mt-3">{b as string}</div><div className="text-xs text-slate-400 mt-1">{a as string} queue</div></div>)}</div></div><div className="bg-[#111827] text-white rounded-2xl p-5"><div className="flex items-center gap-2 text-xs font-bold text-slate-300"><CheckCircle2 size={15}/> TODAY'S FOCUS</div><h3 className="font-extrabold text-lg mt-4">Work the follow-up, not the spreadsheet.</h3><p className="text-xs leading-5 text-slate-400 mt-2">Import a list once. ZAAD gives every lead a direct call, email, social and notes workflow.</p><button onClick={()=>setImportOpen(true)} className="mt-5 bg-white text-slate-900 rounded-xl px-4 py-2 text-xs font-bold">Import your list</button></div></div>
+      </main>
+    </div>
+
+    {selected && <div className="fixed inset-0 bg-slate-900/30 z-50 flex justify-end" onClick={()=>setSelected(null)}><div className="w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto" onClick={e=>e.stopPropagation()}><div className="flex justify-between items-start"><div><div className="w-12 h-12 rounded-full bg-slate-100 grid place-items-center font-extrabold">{selected.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><h2 className="text-xl font-extrabold mt-3">{selected.name}</h2><p className="text-sm text-slate-500">{selected.title} · {selected.company}</p></div><button onClick={()=>setSelected(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={18}/></button></div><div className="grid grid-cols-2 gap-2 mt-6"><a href={`tel:${selected.phone}`} className="rounded-xl bg-emerald-50 text-emerald-700 py-3 text-center text-sm font-bold flex items-center justify-center gap-2"><Phone size={16}/> Call</a><a href={`mailto:${selected.email}`} className="rounded-xl bg-blue-50 text-blue-700 py-3 text-center text-sm font-bold flex items-center justify-center gap-2"><Mail size={16}/> Email</a></div><div className="mt-6 space-y-4"><Field label="Email" value={selected.email}/><Field label="Phone" value={selected.phone}/><Field label="Location" value={selected.location}/><Field label="Website" value={selected.website}/><div><label className="text-xs font-bold text-slate-500">Status</label><select value={selected.status} onChange={e=>{const s=e.target.value; setLeads(p=>p.map(x=>x.id===selected.id?{...x,status:s}:x)); setSelected({...selected,status:s})}} className="mt-1 w-full border border-slate-200 rounded-xl p-2.5 text-sm outline-none"><option>{statuses.filter(x=>x!=='All').join('</option><option>')}</option></select></div><div><label className="text-xs font-bold text-slate-500">Notes</label><textarea defaultValue={selected.notes} onBlur={e=>setLeads(p=>p.map(x=>x.id===selected.id?{...x,notes:e.target.value}:x))} className="mt-1 w-full h-32 border border-slate-200 rounded-xl p-3 text-sm outline-none resize-none" placeholder="Add call notes, objections, next steps..."/></div></div><div className="mt-6 border-t border-slate-100 pt-5"><div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Quick links</div><div className="flex flex-wrap gap-2 mt-3">{[[selected.linkedin,'LinkedIn'],[selected.instagram,'Instagram'],[selected.website,'Website']].map(([url,label])=><a key={label as string} href={url || '#'} target="_blank" className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5">{label as string}<ExternalLink size={12}/></a>)}</div></div></div></div>}
+
+    {importOpen && <div className="fixed inset-0 bg-slate-900/40 z-50 grid place-items-center p-5" onClick={()=>setImportOpen(false)}><div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex justify-between"><div><h2 className="text-xl font-extrabold">Import leads into ZAAD</h2><p className="text-sm text-slate-500 mt-1">Upload a CSV exported from Apollo, Google Sheets, HubSpot or any list.</p></div><button onClick={()=>setImportOpen(false)}><X size={18}/></button></div><button onClick={()=>fileRef.current?.click()} className="mt-6 w-full border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center hover:border-slate-400 transition"><FileSpreadsheet size={30} className="mx-auto text-slate-400"/><div className="font-bold mt-3">Choose CSV file</div><div className="text-xs text-slate-400 mt-1">ZAAD automatically maps common columns</div></button><input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e=>e.target.files?.[0]&&importFile(e.target.files[0])}/><div className="mt-4 flex items-center gap-2 text-xs text-slate-500"><CircleDot size={13}/> Supported: name, company, title, email, phone, website, LinkedIn, Instagram, location</div><div className="mt-5 p-4 rounded-xl bg-slate-50 text-xs text-slate-500 leading-5"><b className="text-slate-700">Google Sheets:</b> export the sheet as CSV, then drop it here. A direct Google Sheets connector can be added later once OAuth credentials are connected.</div></div></div>}
+  </div>;
+}
+
+function Field({label,value}:{label:string,value:string}) { return <div><label className="text-xs font-bold text-slate-500">{label}</label><div className="mt-1 p-2.5 bg-slate-50 rounded-xl text-sm text-slate-700 truncate">{value || '—'}</div></div> }
