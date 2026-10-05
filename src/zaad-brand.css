@@ -1,17 +1,17 @@
-/* ZAAD brand mark for the existing sidebar. */
-aside {
-  position: relative;
+/* ZAAD brand mark: use the supplied gateway/apple mark in the existing top-bar logo slot. */
+
+/* Remove the temporary sidebar overlay and restore the logo to its intended header position. */
+aside::before {
+  content: none;
 }
 
-aside::before {
-  content: "";
-  position: absolute;
-  top: 10px;
-  left: 14px;
-  width: 44px;
-  height: 44px;
-  z-index: 50;
-  pointer-events: none;
-  border-radius: 12px;
-  background: #0b1220 url('/zaad-icon.svg') center / 38px 38px no-repeat;
+/* Replace the old blue "Z" badge without changing the surrounding header layout. */
+header > div:first-of-type > div:first-child {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 0;
+  background: transparent url('/zaad-icon.svg') center / contain no-repeat !important;
+  font-size: 0;
+  line-height: 0;
 }
